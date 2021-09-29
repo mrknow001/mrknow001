@@ -1,14 +1,15 @@
 # About Me 👋
-
-### 信息安全爱好者
-
-
 <img align="right" src="https://github-readme-stats.vercel.app/api?username=mrknow001&show_icons=true)](https://github.com/anuraghazra/github-readme-stats" />
+<h3>关于我</h3>
+<ul>
+  <li>一只破安服</li>
+  <li>喜欢造轮子(python、Java)</li>
+  <li>挖洞菜的一笔，但喜欢研究奇技淫巧</li>
+  <li>沉迷学习</li>
+</ul>
 
-📖 Vocation: Researcher && Student
+💻 Blog: https://blog.404web.me/archives/
 
-💻 Blog: https://assassins-white.github.io
+📫 How to reach me: mrknow001@hotmail.com
 
-📫 How to reach me: assassins-white@foxmail.com
-
-少年须有凌云志，不负黄河万古流
+学无止境...
