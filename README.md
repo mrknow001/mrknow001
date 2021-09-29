@@ -5,7 +5,6 @@
 
 [![Rainbow cat's github stats](https://github-readme-stats.vercel.app/api?username=mrknow001&show_icons=true)](https://github.com/anuraghazra/github-readme-stats)
 
-
 📖 Vocation: Researcher && Student
 
 💻 Blog: https://assassins-white.github.io
