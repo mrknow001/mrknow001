@@ -8,7 +8,7 @@
   <li>上班学习，下班学习，周末学习</li>
 </ul>
 
-💻 Blog: https://blog.404web.me/archives/
+💻 Blog: https://mrknow001.github.io/archives/
 
 📫 How to reach me: mrknow001@hotmail.com
 
