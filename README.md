@@ -5,7 +5,7 @@
   <li>一只破安服</li>
   <li>喜欢造轮子(python、Java)</li>
   <li>挖洞菜的一笔，但喜欢研究奇技淫巧</li>
-  <li>上班学习，下班学习，周末学习</li>
+  <li>又菜又卷</li>
 </ul>
 
 💻 Blog: https://mrknow001.github.io/archives/
