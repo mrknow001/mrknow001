@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Muse","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":false,"show_result":false,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="未授权访问漏洞是一个在企业内部非常常见的问题，这种问题通常都是由于安全配置不当、认证页面存在缺陷，或者压根就没有认证导致的。当某企业对外的服务端口、功能无限制开放，并且对用户的访问没有做任何限制的时候，可能会泄露出某些用户信息、敏感信息甚至可以执行系统命令，操作系统文件，导致系统的整体安全遭到破坏。 [TOC] 01. Redis未授权访问漏洞总结1、应用简介​    Redis是一个开源的使用A">
+<meta property="og:type" content="article">
+<meta property="og:title" content="常见未授权访问漏洞原理及修复总结手册">
+<meta property="og:url" content="http://example.com/2021/12/20/%E5%B8%B8%E8%A7%81%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E5%8E%9F%E7%90%86%E5%8F%8A%E4%BF%AE%E5%A4%8D%E6%80%BB%E7%BB%93%E6%89%8B%E5%86%8C/index.html">
+<meta property="og:site_name" content="一灯和尚&#39;s Blogs">
+<meta property="og:description" content="未授权访问漏洞是一个在企业内部非常常见的问题，这种问题通常都是由于安全配置不当、认证页面存在缺陷，或者压根就没有认证导致的。当某企业对外的服务端口、功能无限制开放，并且对用户的访问没有做任何限制的时候，可能会泄露出某些用户信息、敏感信息甚至可以执行系统命令，操作系统文件，导致系统的整体安全遭到破坏。 [TOC] 01. Redis未授权访问漏洞总结1、应用简介​    Redis是一个开源的使用A">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170756756.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170816816.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170834834.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170851851.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170914914.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170930930.jpg">
+<meta property="og:image" content="https://upload-images.jianshu.io/upload_images/17716535-ffa1b9cd8ed64775.jpg?imageMogr2/auto-orient/strip%7CimageView2/2">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170946946.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171008108.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131710301030.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131710461046.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171102112.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131711201120.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131711371137.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131712241224.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131712411241.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171301131.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131713211321.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131713451345.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131714111411.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131714281428.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131715301530.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131715501550.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171606166.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131716261626.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131716441644.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171705175.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131717201720.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131717361736.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131718321832.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131718511851.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131719111911.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131719291929.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007131719441944.jpg">
+<meta property="og:image" content="http://example.com/2021/12/20/%E5%B8%B8%E8%A7%81%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E5%8E%9F%E7%90%86%E5%8F%8A%E4%BF%AE%E5%A4%8D%E6%80%BB%E7%BB%93%E6%89%8B%E5%86%8C/Users/MrKno/AppData/Roaming/Typora/typora-user-images/image-20220104235108110.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007211457435743.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721145802582.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007211458195819.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007211458455845.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175104794.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175110463.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM2Mzc0ODk2,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175119681.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175122243.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM2Mzc0ODk2,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175129869.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175133124.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM2Mzc0ODk2,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175139605.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175144100.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175150158.png">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175153757.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM2Mzc0ODk2,size_16,color_FFFFFF,t_70">
+<meta property="og:image" content="https://img-blog.csdnimg.cn/20181116175158971.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721145907597.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007211459235923.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007211459405940.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/202007211459585958.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150017017.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150032032.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150053053.jpg">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150112112.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150128128.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150145145.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/2020072115020525.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150225225.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150243243.png">
+<meta property="og:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/2020072115030232.png">
+<meta property="og:image" content="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230856431-1074253913.png">
+<meta property="og:image" content="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230855746-1096889729.png">
+<meta property="og:image" content="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230855243-1998804504.png">
+<meta property="article:published_time" content="2021-12-20T15:11:14.000Z">
+<meta property="article:modified_time" content="2022-01-04T16:04:35.788Z">
+<meta property="article:author" content="一灯和尚">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170756756.jpg">
+
+<link rel="canonical" href="http://example.com/2021/12/20/%E5%B8%B8%E8%A7%81%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E5%8E%9F%E7%90%86%E5%8F%8A%E4%BF%AE%E5%A4%8D%E6%80%BB%E7%BB%93%E6%89%8B%E5%86%8C/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>常见未授权访问漏洞原理及修复总结手册 | 一灯和尚's Blogs</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">一灯和尚's Blogs</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">沉迷学习，无法自拔</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+  <a href="https://github.com/mrknow001" class="github-corner" title="Follow me on GitHub" aria-label="Follow me on GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2021/12/20/%E5%B8%B8%E8%A7%81%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E5%8E%9F%E7%90%86%E5%8F%8A%E4%BF%AE%E5%A4%8D%E6%80%BB%E7%BB%93%E6%89%8B%E5%86%8C/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/46807619.jpg">
+      <meta itemprop="name" content="一灯和尚">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="一灯和尚's Blogs">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          常见未授权访问漏洞原理及修复总结手册
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-12-20 23:11:14" itemprop="dateCreated datePublished" datetime="2021-12-20T23:11:14+08:00">2021-12-20</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2022-01-05 00:04:35" itemprop="dateModified" datetime="2022-01-05T00:04:35+08:00">2022-01-05</time>
+              </span>
+
+          
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>未授权访问漏洞是一个在企业内部非常常见的问题，这种问题通常都是由于安全配置不当、认证页面存在缺陷，或者压根就没有认证导致的。当某企业对外的服务端口、功能无限制开放，并且对用户的访问没有做任何限制的时候，可能会泄露出某些用户信息、敏感信息甚至可以执行系统命令，操作系统文件，导致系统的整体安全遭到破坏。</p>
+<p>[TOC]</p>
+<h2 id="01-Redis未授权访问漏洞总结"><a href="#01-Redis未授权访问漏洞总结" class="headerlink" title="01. Redis未授权访问漏洞总结"></a><strong>01. Redis未授权访问漏洞总结</strong></h2><h3 id="1、应用简介"><a href="#1、应用简介" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>​    Redis是一个开源的使用ANSI  C语言编写、支持网络、可基于内存亦可持久化的日志型、Key-Value数据库。和Memcached类似，它支持存储的value类型相对更多，包括 string(字符串)、list (链表)、set(集合)、zset(sorted  set–有序集合)和hash（哈希类型）。这些数据类型都支持push/pop、add/remove及取交集并集和差集及更丰富的操作，而且这些操作都是原子性的。在此基础上，Redis支持各种不同方式的排序。与Memcached一样，为了保证效率，数据都是缓存在内存中。区别的是Redis会周期性的把更新的数据写入磁盘或者把修改操作写入追加的记录文件，并且在此基础上实现了master-slave(主从)同步。</p>
+<h3 id="2、漏洞简介"><a href="#2、漏洞简介" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>​     Redis因配置不当可以导致未授权访问，被攻击者恶意利用。当前流行的针对Redis未授权访问的一种新型攻击方式，在特定条件下，如果Redis以root身份运行，黑客可以给root账户写入SSH公钥文件，直接通过SSH登录受害服务器，可导致服务器权限被获取和数据删除、泄露或加密勒索事件发生，严重危害业务正常服务。　</p>
+<p>​    部分服务器上的Redis 绑定在 0.0.0.0:6379，并且没有开启认证（这是Redis  的默认配置），以及该端口可以通过公网直接访问，如果没有采用相关的策略，比如添加防火墙规则避免其他非信任来源 ip 访问等，将会导致 Redis  服务直接暴露在公网上，可能造成其他用户可以直接在非授权情况下直接访问Redis服务并进行相关操作。</p>
+<p>​    </p>
+<h3 id="3、漏洞复现"><a href="#3、漏洞复现" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>目标机ip：192.168.210.38攻击机ip：192.168.210.102Redis版本：6.0.5</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170756756.jpg" alt="img"> </p>
+<p>在攻击机直接连接目标机上的Redis即可连接成功，使用info命令可以查看敏感信息。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170816816.jpg" alt="img"><br>在攻击机上连接目标机的Redis服务，然后添加一个计划任务文件，写入一个“每一分钟向攻击机发起一起TCP连接请求”的命令，然后执行。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170834834.jpg" alt="img"><br>在攻击机上开启监听特定端口，等待1分钟左右，目标机执行计划任务，攻击机可以获得一个反弹Shell，获得目标机控制权。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170851851.jpg" alt="img"> </p>
+<h3 id="4、修复加固建议"><a href="#4、修复加固建议" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>①  禁用一些高危命令</p>
+<p>​    修改redis.conf文件，禁用远程修改DB文件地址或修改高危命令的名称。rename-commandFLUSHALL “”rename-command CONFIG “”rename-command EVAL “”</p>
+<p>②  以低权限运行Redis服务为Redis服务创建单独的用户和家庭目录，并且配置禁止登陆groupadd -r redis &amp;&amp; useradd -r -g redis redis。</p>
+<p>③  为Redis设置访问密码修改redis.conf文件，找到Requirepass字段，在后面添加Requirepassmypassword。</p>
+<p>④  禁止外网访问Redis服务在redis.conf文件中，找到# bind 127.0.0.1，把前面的注释符号去掉，让其监听在本地。</p>
+<p>⑤  修改默认端口</p>
+<p>在redis.conf文件中，找到Port字段，将其后面的默认端口6379修改为其他数值。</p>
+<p>⑥  升级Redis版本</p>
+<p>在Redis升级到3.2版本之后，新增了一个Protected-Mode参数，这个参数被启用后将禁止外网访问Redis，只能通过本地或者白名单中的IP进行访问。</p>
+<h2 id="02-Zookeeper未授权访问漏洞总结"><a href="#02-Zookeeper未授权访问漏洞总结" class="headerlink" title="02. Zookeeper未授权访问漏洞总结"></a>02. Zookeeper未授权访问漏洞总结</h2><h3 id="1、应用简介-1"><a href="#1、应用简介-1" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>​    Zookeeper是一个分布式的，开放源码的分布式应用程序协调服务，是Google的Chubby一个开源的实现，是Hadoop和Hbase的重要组件。它是一个为分布式应用提供一致性服务的软件，提供的功能包括：配置维护、域名服务、分布式同步、组服务等。</p>
+<h3 id="2、漏洞简介-1"><a href="#2、漏洞简介-1" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>Zookeeper 的默认开放端口是2181。Zookeeper 安装部署之后默认情况下不需要任何身份验证，造成攻击者可以远程利用  Zookeeper，通过服务器收集敏感信息或者在 Zookeeper  集群内进行破坏（比如：kill命令）。攻击者能够执行所有只允许由管理员运行的命令。</p>
+<h3 id="3、漏洞复现-1"><a href="#3、漏洞复现-1" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>攻击机：192.168.210.38</p>
+<p>目标机：192.168.210.102</p>
+<p>Zookeeper版本：3.6.1 </p>
+<p>目标机对外开启了zookeeper服务，在攻击机端使用zookeeper客户端，直接连接目标机./zkCli.sh -server 192.168.210.102:2181</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170914914.jpg" alt="img"></p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170930930.jpg" alt="img"></p>
+<p>在没有经过认证授权的情况下直接连接成功，可以输入version查看服务版本或使用kill命令进行危险操作等</p>
+<p>输出服务器的详细信息：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="built_in">echo</span> envi | nc xx.xx.xx.xx 2181</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://upload-images.jianshu.io/upload_images/17716535-ffa1b9cd8ed64775.jpg?imageMogr2/auto-orient/strip%7CimageView2/2" alt="img"></p>
+<h3 id="4、修复加固建议-1"><a href="#4、修复加固建议-1" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ①  禁止把Zookeeper直接暴露在公网</p>
+<p>​    ②  添加访问控制，根据情况选择对应方式（认证用户、用户名密码、指定IP）</p>
+<p>​    ③  修改默认端口，将2181端口关闭或者添加诱饵 </p>
+<p>​    ④  绑定指定IP访问</p>
+<h2 id="03-Solr未授权访问漏洞总结"><a href="#03-Solr未授权访问漏洞总结" class="headerlink" title="03. Solr未授权访问漏洞总结"></a>03. Solr未授权访问漏洞总结</h2><h3 id="1、应用简介-2"><a href="#1、应用简介-2" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>Solr全称是Search On Lucene  Replication，是由Apache开发的一个开源的基于Lucene的全文搜索服务器。文档通过Http利用XML加到一个搜索集合中。其集合的配置方法（config路径）可以增加和修改监听器，通过RunExecutableListener执行任意系统命令。查询该集合也是通过http收到一个XML/JSON响应来实现。他的主要特性包括：高效、灵活的缓存功能，垂直搜索功能，高亮显示搜索结果，通过索引复制来提高可用性，提供一套强大Data Schema来定义字段，类型和设置文本分析，提供基于Web的管理界面等。</p>
+<h3 id="2、漏洞简介-2"><a href="#2、漏洞简介-2" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>​    Solr的管理界面通常包含如下信息：Solr的配置信息（包括路径，用户名，系统版本信息），数据库的配置信息（地址，用户名，密码），数据库搜索数据等。Solr未授权访问的危害很大，轻则可查询所有数据库信息，重则可读取系统任意文件，甚至getshell.</p>
+<h3 id="3、漏洞复现-2"><a href="#3、漏洞复现-2" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>目标机上开启了Solr服务，版本是3.4.0，攻击机直接可以未授权访问到其Solr服务。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713170946946.jpg" alt="img"></p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171008108.jpg" alt="img"><br>进一步访问可以获得大量敏感配置信息，以及文件信息等等。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131710301030.jpg" alt="img"></p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131710461046.jpg" alt="img">  </p>
+<h3 id="4、修复加固建议-2"><a href="#4、修复加固建议-2" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>①  禁止外网访问到Solr服务，让其只监听在本地。 </p>
+<p>②  修改默认端口、或修改部分接口默认名称。 </p>
+<p>③  对Solr.RunExecutableListener做访问控制，阻止未经过认证与授权的用户调用。</p>
+<h2 id="04-MongoDB未授权访问漏洞总结"><a href="#04-MongoDB未授权访问漏洞总结" class="headerlink" title="04. MongoDB未授权访问漏洞总结"></a>04. MongoDB未授权访问漏洞总结</h2><h3 id="1、应用简介-3"><a href="#1、应用简介-3" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>MongoDB是一个基于分布式文件存储的数据库，由C++语言编写。旨在为WEB应用提供可扩展的高性能数据存储解决方案。MongoDB是一个介于关系型数据库和非关系型数据库之间的产品。MongoDB的默认端口是27017，MongoDB在启动的时候提供了很多参数，如日志记录到哪个文件夹，是否开启认证等。</p>
+<h3 id="2、漏洞简介-3"><a href="#2、漏洞简介-3" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>MongoDB服务在安装后默认未开启权限验证，默认是空口令，这就导致了任何人无需进行账号认证就可以登陆到数据服务器，对数据库进行任意操作（增、删、改、查等高危动作）</p>
+<p>3.0之前版本的MongoDB,默认监听在0.0.0.0，3.0及之后版本默认监听在127.0.0.1。3.0之前版本，如未添加用户管理员账号及数据库账号，使用–auth参数启动时，在本地通过127.0.0.1仍可无需账号密码登陆访问数据库，远程访问则提示需认证；3.0及之后版本，使用–auth参数启动后，无账号则本地和远程均无任何数据库访问权限。</p>
+<h3 id="3、漏洞复现-3"><a href="#3、漏洞复现-3" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>攻击机：192.168.210.102目标机：192.168.20.35MongoDB版本：3.4.0 首先目标机（192.168.20.35）在27017端口上开启MongoDB服务，但启动时并未加 –auth参数启动认证。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171102112.jpg" alt="img"><br>其次攻击机（192.168.210.102)扫描到目标机在27017端口上开启了MongoDB服务，尝试直接连接，命令如下：Mongo 192.168.20.35：27017攻击者可以直接连接成功，获得了数据库权限，可以查看数据库账号、表名、敏感数据等。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131711201120.jpg" alt="img"></p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131711371137.jpg" alt="img"> </p>
+<h3 id="4、修复加固建议-3"><a href="#4、修复加固建议-3" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>①  禁止外网访问MongoDB，只监听在本地，使用如下命令配置mongod.exe –bind_ip127.0.0.1 –dbpath /xxx/xxx    或在配置文件中指定监听IP    net:     port: 27017      bindIp: 127.0.0.1 </p>
+<p>②  限制访问源    在主机上通过防火墙限制访问源IP，例如在Linux上可以使用iptables进行限制，如下；</p>
+<p>​        iptables-A INPUT -s <ip-address> -p tcp –destination-port 27017 -m stat –stateNEW,ESTABLISHED -j ACCEPT</ip-address></p>
+<p>​        iptables-A OUTPUT -d <ip-address> -p tcp –source-port 27010 -m state ESTABLISHED-j ACCEPT</ip-address></p>
+<p>​        其中<ip-address>替换成需访问MongoDB服务的IP。 </ip-address></p>
+<p>③  启动认证授权功能 –auth    MongoDB自3.0版本以上版本启动时，添加–auth参数可以开启认证访问功能。    </p>
+<p>​    在服务端使用如下命令开启MongoDB服务：Mongod –auth -dbpath XXX/XXX    在</p>
+<p>​    攻击端直接再次使用未授权访问连接服务端，由于目前服务端还未添加一个真正的账户，所以攻击端还是可以直接连接到服务端的MongoDB中去的，但是已经做不了任何的危险操作了。</p>
+<pre><code> ![img](http://www.mchz.com.cn/uploadfiles/2020/07/202007131711521152.jpg)
+</code></pre>
+<p>​    添加账户：在服务端本地，连接MongoDB，创建一个系统管理员账户如下：注意：3.0版本之前使用db.addUser的方法创建用户。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131712241224.jpg" alt="img"><br>重启服务端，使用auth参数启动，攻击端需提供用户名和密码才可以获得数据库访问权限。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131712411241.jpg" alt="img"></p>
+<h2 id="05-Elasticsearch未授权访问漏洞总结"><a href="#05-Elasticsearch未授权访问漏洞总结" class="headerlink" title="05. Elasticsearch未授权访问漏洞总结"></a>05. Elasticsearch未授权访问漏洞总结</h2><h3 id="1、应用简介-4"><a href="#1、应用简介-4" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>Elasticsearch是一个基于Lucene的搜索服务器。它提供了一个分布式多用户能力的全文搜索引擎，基于RESTfulweb接口。Elasticsearch采用JAVA语言开发，作为Apache许可条款下的开放源码发布，是一种流行的企业级搜索引擎。Elasticsearch用于云计算中，能够达到实时搜索，稳定，可靠，快速，安装使用方便。根据DB-Engines的排名显示，Elasticsearch是最受欢迎的企业搜索引擎。</p>
+<h3 id="2、漏洞简介-4"><a href="#2、漏洞简介-4" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>Elasticsearch未授权访问可导致ES中存储的数据被任意查看，主要的危害是数据泄漏。除了未授权访问，历史上还出现过⼏个漏洞，⽐如远程命令执⾏、任意⽂件读取、写webshell等。</p>
+<h3 id="3、漏洞复现-4"><a href="#3、漏洞复现-4" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>​    目标机：192.168.20.35攻击机：192.168.210.102服务版本：Elasticsearch 5.5.0 Elasticsearch默认运行端口是9200，使用攻击机直接访问目标机上的9200端口如下：</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171301131.jpg" alt="img"><br>可以成功访问，证明存在未授权访问漏洞。以下是一些能够获取敏感数据资产的方式：</p>
+<p><a target="_blank" rel="noopener" href="http://ip:9200/_cat/indices/">http://ip:9200/_cat/indices/</a>  <a target="_blank" rel="noopener" href="http://ip:9200/_plugin/head/http://ip:9200/_nodeshttp://ip:9200/_nodes?prettifyhttp://ip:9200/_statushttp://ip:9200/_search?prettyhttp://ip:9200/zjftu/http://ip:9200/_mapping?prettyhttp://ip:9200/Index/Type/Id">http://ip:9200/_plugin/head/http://ip:9200/_nodeshttp://ip:9200/_nodes?prettifyhttp://ip:9200/_statushttp://ip:9200/_search?prettyhttp://ip:9200/zjftu/http://ip:9200/_mapping?prettyhttp://ip:9200/Index/Type/Id</a> 例如，在攻击机上访问<a target="_blank" rel="noopener" href="http://192.168.20.35:9200/">http://192.168.20.35:9200</a></p>
+<p>​    /_cat/indices?v即可查看所有索引Index（数据库）。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131713211321.jpg" alt="img"> </p>
+<p>访问<a target="_blank" rel="noopener" href="http://192.168.20.35:9200/_mapping?pretty">http://192.168.20.35:9200/_mapping?pretty</a><br>=true即可查看所有数据表（Type）。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131713451345.jpg" alt="img"> </p>
+<h3 id="4、修复加固建议-4"><a href="#4、修复加固建议-4" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>①  限制IP访问，绑定固定IP，修改默认端口</p>
+<p>打开配置文件config/elasticsearch.yml，修改network.host字段，将其改成192.168.0.1将其监听在本地，同时修改http.port字段，将其运行在其他端口上。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131714111411.jpg" alt="img"> </p>
+<p>②  添加认证功能与白名单模式修改配置文件config/elasticsearch.yml，将端口设置认证如下：</p>
+<p>​    http.basic.enabledtrue           </p>
+<p>​    #开关，开启会接管全部HTTP连接http.basic.user“admin”           </p>
+<p>​    #账号http.basic.password“password”        </p>
+<p>​    #密码http.basic.ipwhitelist[“localhost”,”127.0.0.1”]  </p>
+<p>​    #白名单内的IP访问不需要通过账号和密码认证，支持IP和主机名，不支持IP区间或正则http.basic.trusted_proxy_chains[]       </p>
+<p>​    #信任代理列表http.basic.logfalse             </p>
+<p>​    #把无授权的访问事件添加到ES的日志http.basic.xforward“”           </p>
+<p>​    #记载代理路径的header字段名。</p>
+<h2 id="06-Jenkins未授权访问漏洞总结"><a href="#06-Jenkins未授权访问漏洞总结" class="headerlink" title="06. Jenkins未授权访问漏洞总结"></a>06. Jenkins未授权访问漏洞总结</h2><h3 id="1、应用简介-5"><a href="#1、应用简介-5" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>​    </p>
+<p>Jenkins是一个开源的、提供友好操作界面的持续集成工具，起源于Hudson。主要用于持续、自动的构建/测试软件项目、监控外部任务的运行。Jenkins用Java语言编写，可在Tomcat等流行的servlet容器中运行，也可独立运行。通常与版本管理工具（SCM）构建工具结合使用。Jenkins官网：<a target="_blank" rel="noopener" href="https://jenkins.io/%E5%AE%98%E6%96%B9%E6%96%87%E6%A1%A3%EF%BC%9Ahttps://jenkins.io/doc/%E3%80%82">https://jenkins.io/官方文档：https://jenkins.io/doc/。</a></p>
+<h3 id="2、漏洞简介-5"><a href="#2、漏洞简介-5" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>​    </p>
+<p>Jenkins的默认配置是允许所有人都可以访问平台上的所有页面，攻击者可以利用平台中的scripts页面执行系统命令漏洞，获取服务器权限，造成服务器被入侵，从而导致敏感数据泄露等安全事件。</p>
+<h3 id="3、漏洞复现-5"><a href="#3、漏洞复现-5" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>​    </p>
+<p>攻击机：192.168.210.102目标机：192.168.20.35服务版本：Jenkins  1.403 Jenkins默认端口是8080，在攻击机上打开浏览器直接访问<a target="_blank" rel="noopener" href="http://192.168.20.35:8080/manage%E5%B0%B1%E5%8F%AF%E4%BB%A5%E7%9B%B4%E6%8E%A5%E5%9C%A8%E6%9C%AA%E6%8E%88%E6%9D%83%E7%9A%84%E6%83%85%E5%86%B5%E4%B8%8B%E8%BF%9B%E5%85%A5%E5%88%B0%E7%9B%AE%E6%A0%87%E6%9C%BA%E5%BC%80%E6%94%BE%E7%9A%84Jenkins%E6%9C%8D%E5%8A%A1%E5%BD%93%E4%B8%AD%E3%80%82">http://192.168.20.35:8080/manage就可以直接在未授权的情况下进入到目标机开放的Jenkins服务当中。</a></p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131714281428.jpg" alt="img"><br>选中脚本命令行，即可执行系统代码，如下：例如执行 Println “ipconfig”.<br>execute().text  ，即可获得目标服务器上的IP信息。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131715301530.jpg" alt="img"><br>亦或者通过以下命令向服务器写入小马文件，newFile(“xxx\xxx\xxx.php”).<br>write(‘<?php @eval($_POST[“shell”]);?>’);</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131715501550.jpg" alt="img"><br>文件传入完成后再使用蚁剑等连接工具，连接小马即可获得WebShell。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171606166.jpg" alt="img"></p>
+<h3 id="4、修复加固建议-5"><a href="#4、修复加固建议-5" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    </p>
+<p>①  添加Jenkins访问密码进入Jenkins首页，点击系统管理进入系统设置，勾选启用安全，在安全域选项下选择Jenkinis专有用户数据库并勾选允许用户注册。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131716261626.jpg" alt="img"><br>返回系统管理，进入管理用户，新建一个使用者如下；</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131716441644.jpg" alt="img"><br>在返回系统设置，在授权策略下勾选登录用户可以做任何事，保存并重启Jenkins即可。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200713171705175.jpg" alt="img"> </p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131717201720.jpg" alt="img"> ② 限制IP访问不要将管理后台开放到互联网上。可以使用ESC安全组策略设置访问控制，默认策略为拒绝所有通信。我们可以根据业务发布情况仅开放需要对外用户提供的服务，并做好对访问源IP的访问控制。</p>
+<h2 id="07-Hadoop未授权访问漏洞总结"><a href="#07-Hadoop未授权访问漏洞总结" class="headerlink" title="07. Hadoop未授权访问漏洞总结"></a>07. Hadoop未授权访问漏洞总结</h2><h3 id="1、应用简介-6"><a href="#1、应用简介-6" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>Hadoop是由Apache基金会所开发的分布式系统基础架构。Hadoop实现了一个分布式文件系统（Hadoop Distributed File  System），简称HDFS。HDFS具有高容错性、高吞吐量的特点、适合那些有着超大数据集的应用程序。HDFS放宽了POSIX的要求，可以以流数据的形式访问文件系统中的数据。Hadoop的框架最核心的设计就是：HDFS和MapReduce。HDFS为海量的数据提供了存储，而MapReduce为海量的数据提供了计算。</p>
+<h3 id="2、漏洞简介-6"><a href="#2、漏洞简介-6" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>互联网上暴露的Hadoop服务器如果没有进行访问认证配置均会受到未授权访问漏洞的影响，攻击者可以针对HDFS发动攻击，删除大多数目录、数据，亦或者备份某些业务数据后在服务器上删除这些数据，并留下一些勒索信息或勒索邮件来索要赎金。</p>
+<h3 id="3、漏洞复现-6"><a href="#3、漏洞复现-6" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>目标机：192.168.210.102攻击机：192.168.20.35服务版本：Hadoop  2.10.0 Hadoop的默认管理页面在8088开放，攻击机直接访问目标机的8088端口即可未授权登录进目标机的Hadoop服务中。<a target="_blank" rel="noopener" href="http://192.168.210.102:8088/">http://192.168.210.102:8088/</a></p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131717361736.jpg" alt="img"> </p>
+<p>或者攻击者可以通过命令行操作多个目录下的数据，进行删除操作等。Curl -I -X DELETE “<a target="_blank" rel="noopener" href="http://ip:50070/webhdfs/v1">http://ip:50070/webhdfs/v1</a><br>/tmp?op=DELETE&amp;recursive=true”<br>Curl -I -X PUT “<a target="_blank" rel="noopener" href="http://ip:50070/webhdfs/v1/">http://ip:50070/webhdfs/v1/</a></p>
+<p>​    NODATA4U?op=MKDIRS”</p>
+<h3 id="4、修复加固建议-6"><a href="#4、修复加固建议-6" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ①  关闭Hadoop Web管理页面或不要开放在公网上</p>
+<p>​    ②  开启服务级别身份验证，如Kerberos认证 </p>
+<p>​    ③  部署Knox、Nginx之类的反向代理系统，防止未经授权的用户访问 </p>
+<p>​    ④  设置“安全组”访问控制策略，将Hadoop默认开放的多个端口对公网全部禁止或限制可信任的IP地址才能访问。</p>
+<h2 id="08-Memcache未授权访问漏洞总结"><a href="#08-Memcache未授权访问漏洞总结" class="headerlink" title="08. Memcache未授权访问漏洞总结"></a>08. Memcache未授权访问漏洞总结</h2><h3 id="1、应用简介-7"><a href="#1、应用简介-7" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>Memcache是一个高性能的分布式的内存对象缓存系统，由LiveJournal的Brad  Fitzpatrick开发，通过在内存中维护一个统一的巨大的hash表来实现。Memcache能够用来存储各种格式的数据、包括图像、视频、文件以及数据库检索的结果等。捡来的说就是将数据调用到内存中，然后从内存中读取，从而大大提高读取速度。</p>
+<h3 id="2、漏洞简介-7"><a href="#2、漏洞简介-7" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>Memcache的默认端口是11211，他以Key-Value（键值对）的形式将数据存储在内存中，由于Memcache的设计存在安全缺陷，客户端连接Memcache服务器后无需认证就可以读取、修改服务器缓存内容。</p>
+<p>除了在Memcache中的数据可以被直接读取造成泄露和修改外，由于Memcache中的数据也会被后端代码处理，当处理代码时存在的缺陷又会导致不同类型的安全问题，例如：XSS漏洞、SQL注入、命令执行漏洞、CRLF漏洞等等。</p>
+<h3 id="3、漏洞复现-7"><a href="#3、漏洞复现-7" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>目标机：192.168.210.38攻击机：192.168.20.35服务版本：Memcached 1.6.6 目标机使用如下命令开启Memcached服务：./memcached -d -l 192.168.210.38 -p  11211-m 2048 -u root。在攻击端使用telnet  尝试连接目标机的11211端口并输入stats，可以在未授权的情况下连接进目标机开放的Memcached服务中，并获取相应敏感信息，如下：</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131718321832.jpg" alt="img"> </p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131718511851.jpg" alt="img"> </p>
+<h3 id="4、修复加固建议-7"><a href="#4、修复加固建议-7" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​     ①  限制访问源由于Memcache无权限控制功能，所以只能对访问来源做严格限制。如果memcache没有在外网开放的必要，可以在memcache启动的时候指定绑定的ip地址为127.0.0.1，例如：Memcached -d -m 2048 -u root -l 127.0.0.1-p 11211</p>
+<p>​     ②  利用iptables对端口和访问源做访问控制如果memcache服务需要对外提供服务，则可以通过iptables进行访问控制，下面是只允许192.168.20.35对11211进行访问 //accept#iptables -A INPUT -p tcp -s 192.168.20.35–dport 11211 -j ACCEPT#iptables -A  INPUT -p udp -s 192.168.20.35–dport 11211 -j ACCEPT //drop#iptables -l  INPUT -p tcp –drop 11211 -jDROP#iptables -l INPUT -p udp –dport 11211  -jDROP #service iptables save#service iptables restart</p>
+<h2 id="09-JBoss未授权访问漏洞总结"><a href="#09-JBoss未授权访问漏洞总结" class="headerlink" title="09. JBoss未授权访问漏洞总结"></a>09. JBoss未授权访问漏洞总结</h2><h3 id="1、应用简介-8"><a href="#1、应用简介-8" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>JBoss是一个基于J2EE的开放源代码的应用服务器。由于JBoss遵循商业友好的LGPL授权分发，并且由开源社区开发，这使得JBoss广为流行。JBoss将具有革命性的JMX微内核服务作为其总线结构，并具有统一的类装载器，因此JBoss具有高度模块化和松耦合的特性。JBoss应用服务器也因此具有健壮的、高质量的良好性能。</p>
+<h3 id="2、漏洞简介-8"><a href="#2、漏洞简介-8" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>JBoss服务默认运行在8080端口，默认情况下JBoss是可以被外网其他用户直接访问到，甚至直接访问<a target="_blank" rel="noopener" href="http://ip:8080/jmx-console%E7%9B%AE%E6%A0%87%E5%9C%B0%E5%9D%80%EF%BC%8C%E5%8F%AF%E4%BB%A5%E5%9C%A8%E6%9C%AA%E6%8E%88%E6%9D%83%E7%9A%84%E6%83%85%E5%86%B5%E4%B8%8B%E6%B5%8F%E8%A7%88JBoss%E7%9A%84%E9%83%A8%E7%BD%B2%E7%AE%A1%E7%90%86%E4%BF%A1%E6%81%AF%E8%80%8C%E4%B8%8D%E9%9C%80%E8%A6%81%E7%94%A8%E6%88%B7%E5%90%8D%E5%92%8C%E5%AF%86%E7%A0%81%E3%80%82%E6%94%BB%E5%87%BB%E8%80%85%E5%8F%AF%E4%BB%A5%E5%9C%A8JBoss%E7%AE%A1%E7%90%86%E9%A1%B5%E9%9D%A2%E7%9B%B4%E6%8E%A5%E9%83%A8%E7%BD%B2%E4%B8%8A%E4%BC%A0%E6%9C%A8%E9%A9%AC%E3%80%81%E6%81%B6%E6%84%8F%E8%BD%AF%E4%BB%B6%E7%AD%89%EF%BC%8C%E5%85%B7%E6%9C%89%E4%B8%A5%E9%87%8D%E7%9A%84%E5%AE%89%E5%85%A8%E9%9A%90%E6%82%A3%E3%80%82">http://ip:8080/jmx-console目标地址，可以在未授权的情况下浏览JBoss的部署管理信息而不需要用户名和密码。攻击者可以在JBoss管理页面直接部署上传木马、恶意软件等，具有严重的安全隐患。</a></p>
+<h3 id="3、漏洞复现-8"><a href="#3、漏洞复现-8" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>目标机：192.168.210.102攻击机：192.168.20.35服务版本：JBoss  6.1.0 目标机默认对外开放了JBoss服务，从攻击机直接访问目标机的8080端口，即可直接进入JBoss管理页面，如下：<a target="_blank" rel="noopener" href="http://192.168.210.102:8080/http://192.168.210.102:8080/jbossws/">http://192.168.210.102:8080/http://192.168.210.102:8080/jbossws/</a></p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131719111911.jpg" alt="img"> </p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131719291929.jpg" alt="img"> </p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007131719441944.jpg" alt="img"></p>
+<h3 id="4、修复加固建议-8"><a href="#4、修复加固建议-8" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ①  对JMX控制页面添加访问验证</p>
+<p>​    ②  不要将JBoss管理页面暴露在外网上 </p>
+<p>​    ③  对JMX Console进行安全配置</p>
+<h2 id="10-Spring-Boot未授权访问漏洞总结"><a href="#10-Spring-Boot未授权访问漏洞总结" class="headerlink" title="10. Spring Boot未授权访问漏洞总结"></a>10. Spring Boot未授权访问漏洞总结</h2><h3 id="1、应用简介-9"><a href="#1、应用简介-9" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>SpringBoot是由Pivotal团队在2103年开始研发、2014年4月发布第一个版本的全新开源的轻量级框架。它基于Spring  4.0设计，不仅继承了Spring框架原有的优秀特性，而且还通过简化配置来进一步简化了Spring应用的整个搭建和开发过程。SpringBoot内嵌了Tomcat、Jetty等Servlet容器，提供自动配置的“starter”项目对象模型（POMS）以简化Maven配置。</p>
+<h3 id="2、漏洞介绍"><a href="#2、漏洞介绍" class="headerlink" title="2、漏洞介绍"></a>2、漏洞介绍</h3><p>Actuator 是 springboot 提供的用来对应用系统进行自省和监控的功能模块，借助于Actuator  开发者可以很方便地对应用系统某些监控指标进行查看、统计等。在 Actuator  启用的情况下，如果没有做好相关权限控制，非法用户可通过访问默认的执行器端点（endpoints）来获取应用系统中的监控信息。Actuator  配置不当导致应用系统监控信息泄露对应用系统及其用户的危害是巨大的。</p>
+<h3 id="3、漏洞复现-9"><a href="#3、漏洞复现-9" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>能因为配置不当而暴露的默认内置路由可能会有：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">v1.x为一下路径，v2.x加上&#x2F;actuator&#x2F;</span><br><span class="line">&#x2F;dump - 显示线程转储（包括堆栈跟踪）</span><br><span class="line">&#x2F;autoconfig - 显示自动配置报告</span><br><span class="line">&#x2F;configprops - 显示配置属性</span><br><span class="line">&#x2F;trace - 显示最后几条HTTP消息（可能包含会话标识符）</span><br><span class="line">&#x2F;logfile - 输出日志文件的内容</span><br><span class="line">&#x2F;shutdown - 关闭应用程序</span><br><span class="line">&#x2F;info - 显示应用信息</span><br><span class="line">&#x2F;metrics - 显示当前应用的’指标’信息</span><br><span class="line">&#x2F;health - 显示应用程序的健康指标</span><br><span class="line">&#x2F;beans - 显示Spring Beans的完整列表</span><br><span class="line">&#x2F;mappings - 显示所有MVC控制器映射</span><br><span class="line">&#x2F;env - 提供对配置环境的访问</span><br><span class="line">&#x2F;restart - 重新启动应用程序</span><br></pre></td></tr></table></figure>
+
+<p>访问<a target="_blank" rel="noopener" href="http://x.x.x.x/actuator">http://x.x.x.x/actuator</a></p>
+<p><img src="/2021/12/20/%E5%B8%B8%E8%A7%81%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E5%8E%9F%E7%90%86%E5%8F%8A%E4%BF%AE%E5%A4%8D%E6%80%BB%E7%BB%93%E6%89%8B%E5%86%8C/Users\MrKno\AppData\Roaming\Typora\typora-user-images\image-20220104235108110.png" alt="image-20220104235108110"></p>
+<p>如上可以看到接口信息</p>
+<p>rce及其他敏感信息利用方法：<a target="_blank" rel="noopener" href="https://github.com/LandGrey/SpringBootVulExploit">https://github.com/LandGrey/SpringBootVulExploit</a></p>
+<h3 id="4、修复加固建议-9"><a href="#4、修复加固建议-9" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>①  对上述请求接口做安全限制例如需要禁用/env接口，可以设置如下Endpoints.env.enabled= false如果只想打开一两个接口，那就先禁用全部接口，然后启用需要的接口：endpoint.enabled  =falseendpoints.metrics.enabled=  true另外也可以引入spring-boot-starter-security依赖<dependency>         <groupId>org.springframework.boot</groupId>         <artifactId>spring-boot-starter-security</artifactId></dependency> ②  开启Security功能，配置访问权限验证在application.properties中指定actuator的端口以及开启security功能，配置访问权限验证，这时再访问actuator功能时就会弹出登录窗口，需要输入账号密码验证后才允许访问。management.port=8099management.security.enabled=truesecurity.user.name=adminsecurity.user.password=admin</p>
+<h2 id="11-Docker未授权访问漏洞总结"><a href="#11-Docker未授权访问漏洞总结" class="headerlink" title="11. Docker未授权访问漏洞总结"></a>11. Docker未授权访问漏洞总结</h2><h3 id="1、应用简介-10"><a href="#1、应用简介-10" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>Docker 是一个开源的应用容器引擎，让开发者可以打包他们的应用以及依赖包到一个可移植的容器中,然后发布到任何流行的Linux机器或Windows机器上,也可以实现虚拟化,容器是完全使用沙箱机制,相互之间不会有任何接口。</p>
+<h3 id="2、漏洞简介-9"><a href="#2、漏洞简介-9" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>Docker RemoteAPI是一个取代远程命令界面（RCLI）的REST API。此API默认对外开放且不需验证，通过Docker  Client或者Http直接请求就可以访问这个API，通过这个接口，我们可以新建container，删除已有container，将目录挂载到新的container上，实现docker穿透，获取服务器shell。</p>
+<h3 id="3、漏洞复现-10"><a href="#3、漏洞复现-10" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>攻击机：192.168.210.38目标机：192.168.210.37服务版本：Docker 18.06.3 目标机在/etc/system/system/docker.service的Docker配置文件中，将自己开放在了外网8888端口上。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007211457435743.jpg" alt="img"><br>在攻击机上可以直接访问目标机的8888端口可以进入到目标机的docker中。例如输入：<a target="_blank" rel="noopener" href="http://192.168.210.37:8888/v1.25/image/json%E5%8F%AF%E4%BB%A5%E6%9F%A5%E7%9C%8B%E7%9B%AE%E6%A0%87%E6%9C%BA%E4%B8%8A%E7%9A%84docker%E4%B8%AD%E7%9A%84%E6%89%80%E6%9C%89image%E4%BF%A1%E6%81%AF%E3%80%82">http://192.168.210.37:8888/v1.25/image/json可以查看目标机上的docker中的所有image信息。</a></p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721145802582.png" alt="img"><br>针对Docker Remote API未授权的利用方式有两种：</p>
+<p>​    一、向目标机写入SSH公钥，然后通过SSH服务直接获取服务器权限。</p>
+<p>​    二、向目标机写入反弹shell，通过计划任务启动也可以获得服务器权限。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007211458195819.png" alt="img"> </p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007211458455845.png" alt="img"> </p>
+<h3 id="4、修复加固建议-10"><a href="#4、修复加固建议-10" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ① 在不必要的情况下，不要启动Docker的Remote API服务，如果必须要启用的话，可以采用设置ACL，即只允许信任的来源IP连接，或设置TLS认证的方法。</p>
+<p>​    ② 在Docker API的服务前设置一个代理服务器，如Nginx，可以有效防止未授权访问。 </p>
+<p>​    ③ 检查Docker配置文件，是否把端口监听在了公网上（/etc/systemd/system/docker.service）</p>
+<h2 id="12-Rsync未授权访问漏洞总结"><a href="#12-Rsync未授权访问漏洞总结" class="headerlink" title="12. Rsync未授权访问漏洞总结"></a>12. Rsync未授权访问漏洞总结</h2><h3 id="1、应用简介-11"><a href="#1、应用简介-11" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>Rsync（remote  synchronize）是Linux/Unix下的一个远程数据同步工具。它可通过LAN/WAN快速同步多台主机间的文件和目录，并适当利用Rsync算法（差分编码）以减少数据的传输。Rsync算法并不是每一次都整份传输，而是只传输两个文件的不同部分，因此其传输速度相当快。除此之外，Rsync可拷贝、显示目录属性，以及拷贝文件，并可选择性的压缩以及递归拷贝。</p>
+<h3 id="2、漏洞简介-10"><a href="#2、漏洞简介-10" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>Rsync是Linux下一款数据备份工具，支持通过Rsync协议、ssh协议进行远程文件传输。常被用在内网进行源代码的分发及同步更新，因此使用人群多为开发人员。其中Rsync协议默认监听873端口，而一般开发人员安全意识薄弱的情况下，如果目标开启了Rsync服务，并且没有配置ACL或访问密码，我们将可以远程读写目标服务器文件，设置获得服务器控制权限。</p>
+<h3 id="3、漏洞复现-11"><a href="#3、漏洞复现-11" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>可以对目标服务器进行扫描：</p>
+<p>扫描结果：<br> <img src="https://img-blog.csdnimg.cn/20181116175104794.png" alt="在这里插入图片描述"><br> Rsync非授权访问利用<br> 查看模块名列表：</p>
+<p>查看src模块</p>
+<p>结果如下：<br> <img src="https://img-blog.csdnimg.cn/20181116175110463.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM2Mzc0ODk2,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述"><br> 可以看到目标机器的目录已经被列举出来了：<br> 利用方法<br> 下载文件</p>
+<p>执行结果：<br> <img src="https://img-blog.csdnimg.cn/20181116175119681.png" alt="在这里插入图片描述"><br> <img src="https://img-blog.csdnimg.cn/20181116175122243.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM2Mzc0ODk2,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述"></p>
+<p>上传文件反弹shell<br> 查看crontab配置文件：</p>
+<p>下载crontab配置文件：</p>
+<p>查看其内容：<br> <img src="https://img-blog.csdnimg.cn/20181116175129869.png" alt="在这里插入图片描述"><br> <img src="https://img-blog.csdnimg.cn/20181116175133124.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM2Mzc0ODk2,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述"></p>
+<p>其中</p>
+<p>表示在每小时的第17分钟执行run-parts –report /etc/cron.hourly命令<br> shell 写法如下：</p>
+<p>赋予执行权限：</p>
+<p>将shell上传至/etc/cron.hourly</p>
+<p>本地监听：</p>
+<p>实验可以自己去修改/etc/crontab配置文件<br> 查看docker容器 ID</p>
+<p><img src="https://img-blog.csdnimg.cn/20181116175139605.png" alt="在这里插入图片描述"><br> <img src="https://img-blog.csdnimg.cn/20181116175144100.png" alt="在这里插入图片描述">进入docker</p>
+<p><img src="https://img-blog.csdnimg.cn/20181116175150158.png" alt="在这里插入图片描述"><br> 打开/etc/crontab配置文件(vim自己安装。。)</p>
+<p>把时间修改成自己想要的就好<br> <img src="https://img-blog.csdnimg.cn/20181116175153757.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3FxXzM2Mzc0ODk2,size_16,color_FFFFFF,t_70" alt="在这里插入图片描述"><br> 等待时间的到来即可。成功反弹shell<br> <img src="https://img-blog.csdnimg.cn/20181116175158971.png" alt="在这里插入图片描述"></p>
+<h3 id="4、修复加固建议-11"><a href="#4、修复加固建议-11" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ① 正确配置认证用户名或密码<br>Auth users = rsync_backup #认证的用户名，如果没有这行则表示是匿名，此用户与系统无关。</p>
+<p>Secrets file = /rsync.pwd #密码和用户名对比表 </p>
+<p>​    ②  遵循最小权限原则，只配置只读权限 </p>
+<p>​    ③  使用host allow/deny来控制接入源IP </p>
+<p>​    ④  非必要的情况下应该仅限制配置路径下可访问</p>
+<h2 id="13-NFS未授权访问漏洞总结"><a href="#13-NFS未授权访问漏洞总结" class="headerlink" title="13. NFS未授权访问漏洞总结"></a>13. NFS未授权访问漏洞总结</h2><h3 id="1、应用简介-12"><a href="#1、应用简介-12" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>NFS全称是网络文件系统（Network File System），是由SUN公司研制的UNIX表示层协议（presentation layer  protocol），允许远程客户端以与本地文件系统类似的方式，来通过网络进行访问。NFS允许在多个用户之间共享公共文件系统，并提供数据集中的优势，来最小化所需的存储空间。</p>
+<h3 id="2、漏洞简介-11"><a href="#2、漏洞简介-11" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>NFS是FreeBSD支持的文件系统中的一种，它允许网络中的计算机之间通过TCP/IP网络共享资源，而不正确的配置使用NFS，则会造成严重的安全问题，体现在以下4个方面：</p>
+<p>​    1. 缺少对NFS的访问控制机制</p>
+<p>​    2. NFS没有真正的用户验证机制，而只有对RPC/Mount请求的过程验证机制</p>
+<p>​    3. 较早的NFS可以使未授权用户获得有效的文件句柄</p>
+<p>​    4. 在RPC远程调用中，一个SUID的程序就具有超级用户的权限</p>
+<h3 id="3、漏洞复现-12"><a href="#3、漏洞复现-12" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>攻击机：192.168.210.38（Kali）目标机：192.168.210.37（Centos7）服务版本：NFS 1.3.0 目标机开启NFS服务</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721145907597.png" alt="img"><br>在攻击机上扫描目标机NFS服务，rpcinfo-p 192.168.210.37，发现目标机存在NFS未授权访问漏洞。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007211459235923.png" alt="img"> </p>
+<p>查看目标机挂载的内容：showmount -e 192.168.210.37</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007211459405940.png" alt="img"><br>在攻击机上生成SSH公钥，并将公钥复制到受害者服务器上，这样攻击者就可以在攻击机上直接远程通过SSH服务连接到目标机上，获取控制权限。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/202007211459585958.png" alt="img"><br>与目标机的NFS建立连接，同时将本机的SSH公钥传送到目标机中。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150017017.png" alt="img"><br>在攻击机上直接使用root用户远程登录目标机，即可获得目标机控制权限。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150032032.png" alt="img"> </p>
+<h3 id="4、修复加固建议-12"><a href="#4、修复加固建议-12" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ①  对共享文件进行访问控制对/etc/exports文件中，所设置的共享的文件或目录做好访问控制，如：/homeexport 172.19.104.6<br>(rw,async,no_root_squash)即仅允许172.19.104.6访问/home用户。</p>
+<h2 id="14-VNC未授权访问漏洞总结"><a href="#14-VNC未授权访问漏洞总结" class="headerlink" title="14. VNC未授权访问漏洞总结"></a>14. VNC未授权访问漏洞总结</h2><h3 id="1、应用简介-13"><a href="#1、应用简介-13" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>VNC是虚拟网络控制台的缩写（Virtual Network  Console），它是一款优秀的远程控制工具软件，由著名的AT&amp;T的欧洲实验室开发。VNC是在基于UNIX和Linux操作系统的免费的开源软件，远程控制能力强大，高效实用。VNC基本上是由vncviewer和vncserver组成，VNC的运行原理和一些Windows下的远程控制软件很相像。</p>
+<p>VNC的服务器端应用程序在UNIX和Linux操作系统中适应性很强，图形用户界面十分友好，看上去和Windows下的软件界面也很类似。在任何安装了客户端的应用程序(vncviewer)的Linux平台的计算机都能十分方便地和安装了服务器端的应用程序(vncserver)的计算机相互连接。另外，服务器端 (vncserver)还内建了Java  Web接口，这样用户通过服务器端对其他计算机的操作就能通过Netscape显示出来了，这样的操作过程和显示方式比较直观方便。</p>
+<h3 id="2、漏洞简介-12"><a href="#2、漏洞简介-12" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>VNC的默认端口号为5900和5901。VNC未授权访问漏洞如果被利用可能造成恶意用户直接控制target主机。</p>
+<h3 id="3、漏洞复现-13"><a href="#3、漏洞复现-13" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>攻击机：192.168.210.38（Kali）目标机：192.168.210.104（Windows Server 2003）服务版本：VNC 3.8 攻击机无需输入用户名与密码即可连接到目标机开放的VNC server中。</p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150053053.jpg" alt="img"><br>检测方法：</p>
+<p>​    使用 Metasploit 进行批量检测。</p>
+<p>​    ① 在 kali 下运行msfconsolemsfconsole。</p>
+<p>​    ② 调用 VNC 未授权检测模块useauxiliary/scanner/<br>vnc/vnx_none_auth。<br>​    ③ 显示有哪些选项show options。<br>​    ④ 设置地址段set rhosts ip 或 段。<br>​    ⑤ 设置线程set threads 50。<br>​    ⑥ 开始扫描run。</p>
+<h3 id="4、修复加固建议-13"><a href="#4、修复加固建议-13" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ①  配置VNC客户端登录口令认证并配置符合密码强度要求的密码<br>​    ②  以最小普通权限身份运行操作系统</p>
+<h2 id="15-FTP未授权访问漏洞总结"><a href="#15-FTP未授权访问漏洞总结" class="headerlink" title="15. FTP未授权访问漏洞总结"></a>15. FTP未授权访问漏洞总结</h2><h3 id="1、应用简介-14"><a href="#1、应用简介-14" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>FTP是文件传输协议（File Transfer  Protocol）的缩写，FTP是用于在网络上进行文件传输的一套标准协议，FTP允许用户以文件操作的方式（如文件的增、删、改、查、传送等）与另一主机相互通信。然而，用户并不需要真正登陆到自己想要存取的计算机上面而成为完全用户，可用FTP程序访问远程资源，实现用户往返传输文件、目录管理以及访问电子邮件等等，即使双方计算机可能配有不同的操作系统和文件存储方式。</p>
+<h3 id="2、漏洞简介-13"><a href="#2、漏洞简介-13" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>如果目标开启了匿名FTP服务，匿名FTP允许任意用户通过FTP来访问开放的目录和文件来进行信息收集进行下一步的攻击。使用匿名访问ftp服务可以尝试在windows的目录中直接访问：<a href="ftp://xxx.xxx.xxx.xxx，也可以在Cmd中使用账户：anonymous和空密码认证。">ftp://xxx.xxx.xxx.xxx，也可以在Cmd中使用账户：anonymous和空密码认证。</a></p>
+<h3 id="3、漏洞复现-14"><a href="#3、漏洞复现-14" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>攻击机：192.168.20.35（Windows10）目标机：192.168.210.37（Centos7）服务版本：vsftpd 3.0.2 目标机首先开启FTP服务</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150112112.png" alt="img"><br>攻击机使用Xftp以匿名方式直接连接目标机的21端口。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150128128.png" alt="img"> </p>
+<p>即可直接登陆成功，并上传或下载敏感文件。</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150145145.png" alt="img"> </p>
+<h3 id="4、修复加固建议-14"><a href="#4、修复加固建议-14" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​         ①  禁用匿名登陆在/etc/vsftpd.conf文件中,将允许匿名用户登录这一行设置为no，即anonymous_enable=NO</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/2020072115020525.png" alt="img"> </p>
+<p>​    ②  对用户做访问控制在/etc/vsftpd.conf文件中，通过以下三条配置文件来控制用户Chroot_list_enable=NOChroot_list_file=/etc/vsftpd/chroot_listChroot_local_user=NO分别是设置是否启用chroot_list_file配置项指定的用户列表文件；指定用户列表文件，该文件用于控制哪些用户可以切换到用户家目录的上级目录；指定用户列表文件中的用户是否允许切换到上级目录。</p>
+<h2 id="16-CouchDB未授权访问漏洞总结"><a href="#16-CouchDB未授权访问漏洞总结" class="headerlink" title="16. CouchDB未授权访问漏洞总结"></a>16. CouchDB未授权访问漏洞总结</h2><h3 id="1、应用简介-15"><a href="#1、应用简介-15" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>CouchDB是一个开源的面向文档的数据库管理系统，可以通过RESTful JavaScript Object Notation（JSON）API访问。术语“Couch”是“ClusterOf Unreliable  Commodity  Hardware”的首字母缩写，他反映了CouchDB的目标具有高度可伸缩性，提供了高可用性和高可靠性，即使运行在容易出现故障的硬件上也是如此。</p>
+<h3 id="2、漏洞简介-14"><a href="#2、漏洞简介-14" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>CouchDB默认会在5984端口开放Restful的API接口，用于数据库管理。如果攻击者可以远程访问到目标机暴露在公网上的CouchDB服务，那么攻击者可以通过未授权访问漏洞查看或下载数据库中的敏感文件，甚至通过上传shell获得数据库管理权限进一步获得服务器控制权限。</p>
+<h3 id="3、漏洞复现-15"><a href="#3、漏洞复现-15" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>攻击机：192.168.20.35（Windows10）目标机：192.168.210.37（Centos7）服务版本：CouchDB 1.6.0 目标机通过vulhub开启couchDB镜像</p>
+<p>​    <img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150225225.png" alt="img"><br>攻击机直接访问目标机的默认5984端口即可查看CouchDB配置信息，并操作数据库。 </p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/20200721150243243.png" alt="img"> </p>
+<p><img src="http://www.mchz.com.cn/uploadfiles/2020/07/2020072115030232.png" alt="img"> </p>
+<h3 id="4、修复加固建议-15"><a href="#4、修复加固建议-15" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ①  绑定指定IP在/etc/couchdb/local.inf文件中找到“bind_address = 0.0.0.0 ”，将0.0.0.0修改为127.0.0.1，即监听在本地端口上。保存重启后，只有本机才能访问CouochDB。</p>
+<p>​    ②  设置访问密码在/etc/couchdb/local.inf文件中找到“【admin】”字段，添加用户名和密码。</p>
+<h2 id="17-LDAP未授权访问漏洞总结"><a href="#17-LDAP未授权访问漏洞总结" class="headerlink" title="17. LDAP未授权访问漏洞总结"></a>17. LDAP未授权访问漏洞总结</h2><h3 id="1、应用简介-16"><a href="#1、应用简介-16" class="headerlink" title="1、应用简介"></a>1、应用简介</h3><p>LDAP是轻型目录访问协议（Lightweight Directory Access  Protocol）的缩写，LDAP是一个开放的、中立的，工业标准的应用协议，通过IP协议提供访问控制和维护分布式信息的目录信息。LDAP基于X.500标准的子集，常用在单点登陆上，用户可以在多个服务中使用同一个密码，通常用在公司内部网站的登陆中。</p>
+<h3 id="2、漏洞简介-15"><a href="#2、漏洞简介-15" class="headerlink" title="2、漏洞简介"></a>2、漏洞简介</h3><p>LDAP模块默认是允许用户匿名访问存储在信息目录（也就是LDAP目录）中的信息的协议，可以获取所有用户及组织结构等信息，同时远程攻击者可以利用这个漏洞不使用口令访问受此漏洞影响的运行login_ldap的系统。通过LDAP的未授权访问漏洞可以获得很多敏感的数据。</p>
+<h3 id="3、漏洞复现-16"><a href="#3、漏洞复现-16" class="headerlink" title="3、漏洞复现"></a>3、漏洞复现</h3><p>注意Anonymous bind那里要勾选上，因为默认的LDAP服务都是开启匿名访问的，但是只能进行read和search操作，不可以删除和修改。</p>
+<p><a target="_blank" rel="noopener" href="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230856431-1074253913.png"><img src="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230856431-1074253913.png" alt="image-20201028230120087"></a></p>
+<p><a target="_blank" rel="noopener" href="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230855746-1096889729.png"><img src="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230855746-1096889729.png" alt="image-20201028225928038"></a></p>
+<p>如需指定用户则需要在下图红框内指定cn和相应的password</p>
+<p><a target="_blank" rel="noopener" href="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230855243-1998804504.png"><img src="https://img2020.cnblogs.com/blog/1835657/202010/1835657-20201028230855243-1998804504.png" alt="image-20201028230322212"></a></p>
+<h3 id="4、修复加固建议-16"><a href="#4、修复加固建议-16" class="headerlink" title="4、修复加固建议"></a>4、修复加固建议</h3><p>​    ①  设置密码设置一个至少8位以上，包含大小写字母、数字和特殊字符的强密码。导入基础objectClass# 加载ppolicy配置ldapadd-Y EXTERNAL -H ldapi:/// -f<br>new_ppolicy.ldif 配置module模块、加载accesslog、auditlog、pploicy、memberofcat&lt;&lt; EOF | ldapadd -Y EXTERNAL -H  ldapi:///dn:cn=module,cn=configobjectClass:olcModuleListcn:  moduleolcModulePath:/usr/lib64/openldapolcModulepath:   /usr/lib/openldapolcModuleload:accesslog.laolcModuleload:auditlog.laolcModuleload:memberof.laolcModuleLoad:ppolicy.laEOF 配置DBcat&lt;&lt; EOF | ldapadd -Y EXTERNAL -H  ldapi:///dn:olcOverlay=ppolicy,olcDatabase={2}hdb,cn=configchangetype:addobjectClass:olcConfigobjectClass:olcOverlayConfigobjectClass:olcPPolicyConfigolcOverlay:ppolicyolcPPolicyDefault:cn=pwdDefault,ou=Policies,dc=laoshiren,dc=comolcPPolicyHashCleartext:TRUEolcPPolicyUseLockout:TRUEEOF 创建组cat&lt;&lt; EOF | ldapadd -x -D cn=<br>manager,dc=laoshiren,dc=com  -Wdn:ou=Policies,dc=laoshiren,dc=comobjectClass:topobjectClass:organizationalUnitou:PoliciesEOF 创建默认密码策略cat&lt;&lt; EOF | ldapadd -x -D cn=manager,<br>dc=laoshiren,dc=com  -Wdn:cn=pwdDefault,ou=Policies,dc=laoshiren,dc=comcn:pwdDefaultobjectClass:topobjectClass:deviceobjectClass:pwdPolicyobjectClass:pwdPolicyCheckerpwdAttribute:userPasswordpwdInHistory:8pwdMinLength:8pwdMaxFailure:3pwdFailureCountInterval:1800pwdCheckQuality:2pwdMustChange:TRUEpwdGraceAuthNLimit:0pwdMaxAge:3600pwdExpireWarning:1209600pwdLockoutDuration:900pwdLockout:TRUEEOF</p>
+<p>转载：<a target="_blank" rel="noopener" href="http://www.mchz.com.cn/cn/service/safety-lab/info_26.aspx?itemid=3467&amp;ezeip=es515pfuwaihdff3mzwbdg==">http://www.mchz.com.cn/cn/service/safety-lab/info_26.aspx?itemid=3467&amp;ezeip=es515pfuwaihdff3mzwbdg==</a></p>
+
+    </div>
+
+    
+    
+    
+
+      <footer class="post-footer">
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2021/06/29/SQL%E6%B3%A8%E5%85%A5%E7%BB%95waf/" rel="prev" title="sql注入绕waf">
+      <i class="fa fa-chevron-left"></i> sql注入绕waf
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#01-Redis%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">1.</span> <span class="nav-text">01. Redis未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B"><span class="nav-number">1.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B"><span class="nav-number">1.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0"><span class="nav-number">1.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE"><span class="nav-number">1.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#02-Zookeeper%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">2.</span> <span class="nav-text">02. Zookeeper未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-1"><span class="nav-number">2.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-1"><span class="nav-number">2.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-1"><span class="nav-number">2.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-1"><span class="nav-number">2.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#03-Solr%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">3.</span> <span class="nav-text">03. Solr未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-2"><span class="nav-number">3.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-2"><span class="nav-number">3.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-2"><span class="nav-number">3.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-2"><span class="nav-number">3.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#04-MongoDB%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">4.</span> <span class="nav-text">04. MongoDB未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-3"><span class="nav-number">4.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-3"><span class="nav-number">4.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-3"><span class="nav-number">4.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-3"><span class="nav-number">4.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#05-Elasticsearch%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">5.</span> <span class="nav-text">05. Elasticsearch未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-4"><span class="nav-number">5.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-4"><span class="nav-number">5.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-4"><span class="nav-number">5.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-4"><span class="nav-number">5.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#06-Jenkins%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">6.</span> <span class="nav-text">06. Jenkins未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-5"><span class="nav-number">6.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-5"><span class="nav-number">6.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-5"><span class="nav-number">6.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-5"><span class="nav-number">6.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#07-Hadoop%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">7.</span> <span class="nav-text">07. Hadoop未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-6"><span class="nav-number">7.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-6"><span class="nav-number">7.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-6"><span class="nav-number">7.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-6"><span class="nav-number">7.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#08-Memcache%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">8.</span> <span class="nav-text">08. Memcache未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-7"><span class="nav-number">8.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-7"><span class="nav-number">8.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-7"><span class="nav-number">8.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-7"><span class="nav-number">8.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#09-JBoss%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">9.</span> <span class="nav-text">09. JBoss未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-8"><span class="nav-number">9.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-8"><span class="nav-number">9.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-8"><span class="nav-number">9.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-8"><span class="nav-number">9.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#10-Spring-Boot%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">10.</span> <span class="nav-text">10. Spring Boot未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-9"><span class="nav-number">10.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E4%BB%8B%E7%BB%8D"><span class="nav-number">10.2.</span> <span class="nav-text">2、漏洞介绍</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-9"><span class="nav-number">10.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-9"><span class="nav-number">10.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#11-Docker%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">11.</span> <span class="nav-text">11. Docker未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-10"><span class="nav-number">11.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-9"><span class="nav-number">11.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-10"><span class="nav-number">11.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-10"><span class="nav-number">11.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#12-Rsync%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">12.</span> <span class="nav-text">12. Rsync未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-11"><span class="nav-number">12.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-10"><span class="nav-number">12.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-11"><span class="nav-number">12.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-11"><span class="nav-number">12.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#13-NFS%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">13.</span> <span class="nav-text">13. NFS未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-12"><span class="nav-number">13.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-11"><span class="nav-number">13.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-12"><span class="nav-number">13.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-12"><span class="nav-number">13.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#14-VNC%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">14.</span> <span class="nav-text">14. VNC未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-13"><span class="nav-number">14.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-12"><span class="nav-number">14.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-13"><span class="nav-number">14.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-13"><span class="nav-number">14.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#15-FTP%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">15.</span> <span class="nav-text">15. FTP未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-14"><span class="nav-number">15.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-13"><span class="nav-number">15.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-14"><span class="nav-number">15.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-14"><span class="nav-number">15.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#16-CouchDB%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">16.</span> <span class="nav-text">16. CouchDB未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-15"><span class="nav-number">16.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-14"><span class="nav-number">16.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-15"><span class="nav-number">16.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-15"><span class="nav-number">16.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#17-LDAP%E6%9C%AA%E6%8E%88%E6%9D%83%E8%AE%BF%E9%97%AE%E6%BC%8F%E6%B4%9E%E6%80%BB%E7%BB%93"><span class="nav-number">17.</span> <span class="nav-text">17. LDAP未授权访问漏洞总结</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#1%E3%80%81%E5%BA%94%E7%94%A8%E7%AE%80%E4%BB%8B-16"><span class="nav-number">17.1.</span> <span class="nav-text">1、应用简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2%E3%80%81%E6%BC%8F%E6%B4%9E%E7%AE%80%E4%BB%8B-15"><span class="nav-number">17.2.</span> <span class="nav-text">2、漏洞简介</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3%E3%80%81%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0-16"><span class="nav-number">17.3.</span> <span class="nav-text">3、漏洞复现</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#4%E3%80%81%E4%BF%AE%E5%A4%8D%E5%8A%A0%E5%9B%BA%E5%BB%BA%E8%AE%AE-16"><span class="nav-number">17.4.</span> <span class="nav-text">4、修复加固建议</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="一灯和尚"
+      src="/images/46807619.jpg">
+  <p class="site-author-name" itemprop="name">一灯和尚</p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">8</span>
+          <span class="site-state-item-name">文章</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-name">分类</span>
+      </div>
+  </nav>
+</div>
+
+
+  <div class="links-of-blogroll motion-element">
+    <div class="links-of-blogroll-title"><i class="fa fa-link fa-fw"></i>
+      大佬们
+    </div>
+    <ul class="links-of-blogroll-list">
+        <li class="links-of-blogroll-item">
+          <a href="https://assassins-white.github.io/" title="https:&#x2F;&#x2F;assassins-white.github.io&#x2F;" rel="noopener" target="_blank">Assassins小白博客</a>
+        </li>
+        <li class="links-of-blogroll-item">
+          <a href="http://www.ji4n.cn/" title="http:&#x2F;&#x2F;www.ji4n.cn&#x2F;" rel="noopener" target="_blank">Jen博客</a>
+        </li>
+        <li class="links-of-blogroll-item">
+          <a href="https://blog.le31ei.top/" title="https:&#x2F;&#x2F;blog.le31ei.top&#x2F;" rel="noopener" target="_blank">le31ei博客</a>
+        </li>
+        <li class="links-of-blogroll-item">
+          <a href="https://www.lele8.me/" title="https:&#x2F;&#x2F;www.lele8.me&#x2F;" rel="noopener" target="_blank">回梦博客</a>
+        </li>
+    </ul>
+  </div>
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">一灯和尚</span>
+</div>
+  <div class="powered-by">一只安全小菜鸡
+  </div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
