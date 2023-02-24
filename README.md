@@ -3,8 +3,8 @@
 <h3>关于我</h3>
 <ul>
   <li>一只破安服</li>
-  <li>喜欢造轮子</li>
   <li>又菜又卷</li>
+  <li>喜欢造轮子</li>
 </ul>
 
 💻 Blog: https://mrknow001.github.io/archives/
